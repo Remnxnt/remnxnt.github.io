@@ -39,7 +39,6 @@
         <li><a href="#executive-summary">Executive Summary</a></li>
         <li><a href="#engagement-overview">Engagement Overview</a></li>
         <li><a href="#limitations-disclaimer">Limitations</a></li>
-        <li><a href="#objectives-scope">Objectives and Scope</a></li>
         <li><a href="#testing-methodology">Testing Methodology</a></li>
         <li><a href="#findings">Findings</a></li>
         <li>
@@ -145,12 +144,12 @@
       </li>
       <li>
         <strong>High (Brute-force):</strong> Lack of rate limiting enabled
-        automated password guessing and unauthorised access.
+        automated password guessing and unauthorized access.
       </li>
     </ul>
 
     <p>
-      Successful exploitation demonstrated the possibility of: unauthorised
+      Successful exploitation demonstrated the possibility of: unauthorized
       access to privileged legal data, deletion or tampering of case files,
       and exposure of client PII—creating
       <em>significant business, reputational, and potential regulatory risk</em>.
@@ -252,7 +251,7 @@
         </p>
         <img src="assets/marshaprofdetails.png" class="screenshot">
         <p>
-          <strong>Reccomendation:</strong> Immediately implement secure password hashing (e.g., bcrypt or Argon2).
+          <strong>Recommendation:</strong> Immediately implement secure password hashing (e.g., bcrypt or Argon2).
           Ensure no plaintext credentials are stored or returned by the application, and enforce a global password reset
           post-remediation.
         </p>
@@ -419,7 +418,8 @@
           <strong>Evidence:</strong> When logged in as Shayne Cairns, pressing the “Delete Case” button causes the case
           to disappear from Shayne's view, upon leaving the page and coming back the case returns.
         </p>
-        <img src="assets/confirmeddeletion.png" class="screenshot" />
+        <img src="assets/before.png" class="screenshot" />
+        <img src="assets/after.png" class="screenshot" />
         <p>
           <strong>Recommendation:</strong> Ensure that all destructive actions, including case deletions, are handled at
           the backend level with verifiable state changes. All user-facing features must reflect the true state
