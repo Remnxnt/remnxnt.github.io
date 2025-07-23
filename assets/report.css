@@ -48,12 +48,12 @@ body::after {
 
 body::before {
   left: 0;
-  background-image: url("assets/ChatGPT.png");
+  background-image: url("background.png");
 }
 
 body::after {
   right: 0;
-  background-image: url("assets/ChatGPT.png");
+  background-image: url("background.png");
 }
 
 /* ----------  HEADER FIXED ELEMENTS  ---------- */
