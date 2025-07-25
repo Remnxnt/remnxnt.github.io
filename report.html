@@ -10,7 +10,8 @@
 </head>
 
 <body>
-  <div class="logo">CouldBeYourCompanyHere</div>
+  <div class="logo">FakeCompany</div>
+  <div class="classification">CONFIDENTIAL</div>
   <label class="switch">
     <input type="checkbox" id="themeToggle" />
     <span class="slider round"></span>
@@ -21,7 +22,7 @@
   <div class="tile-wrapper">
     <!-- Report content START -->
     <h1 style="text-align: center; font-size: 60px; color: rebeccapurple">
-      CouldBeYourCompanyHere
+      FakeCompany
     </h1>
     <div class="company-logo">
       <img src="assets/company-logo.png" />
@@ -90,16 +91,13 @@
     <br>
     <br>
     <br>
-    
+
     <h2 id="executive-summary">Executive Summary</h2>
     <p>
-      Between <strong>10 July 2025</strong> and <strong>20 July 2025</strong>,
-      CouldBeYourCompanyName performed an external, black-box web-application
-      penetration test for <strong>VulnLawyers</strong>. The
-      recommendations provided in this report are structured to facilitate
-      remediation of the identified security risks. This document serves as a
-      formal letter of attestation for the recent VulnLawyers company
-      black-box penetration test.
+      Between 10 July 2025 and 20 July 2025, FakeCompany performed an external, black-box web-application penetration
+      test for VulnLawyers. The recommendations provided in this report are structured to facilitate remediation of the
+      identified security risks. This document serves as a formal letter of attestation for the recent VulnLawyers
+      company black-box penetration test.
     </p>
     <p>
       Evaluation ratings are based on a comparison between findings from the
@@ -110,7 +108,7 @@
       <a style="color: inherit; text-decoration: none" href="#appendix-a"><strong> Appendix A</strong></a>.
     </p>
     <p>
-      It is recommend to review the <a style="color: inherit; text-decoration: none" href="#findings"><strong>
+      It is recommended to review the <a style="color: inherit; text-decoration: none" href="#findings"><strong>
           Findings</strong></a> section for a better understanding of risks and security issues discovered.
     </p>
     <table cellpadding="10" cellspacing="0">
@@ -139,7 +137,8 @@
         takeover of every user account on the web application.
       </li>
       <li>
-        <strong>Critical (IDOR):</strong> Direct access to profile details for accounts other than the one authenticated
+        <strong>Critical (Insecure Direct Object Reference):</strong> Direct access to profile details for accounts
+        other than the one authenticated
         was permitted.
       </li>
       <li>
@@ -179,7 +178,7 @@
     <br>
     <br>
     <br>
-    
+
     <h1 id="limitations-disclaimer">Limitations</h1>
     <p>This assessment was conducted under a defined scope and with explicit constraints provided prior to testing.
       Infrastructure-level testing, including backend server enumeration, network-layer probing, and denial-of-service
@@ -189,7 +188,22 @@
       otherwise noted. No persistent access, source code review, or social engineering techniques were employed. The
       findings presented herein reflect the application's state only during the assessment window and may not account
       for subsequent changes or time-based exposure.</p>
-    
+
+    <table>
+      <thead>
+        <tr>
+          <th>Domains Tested</th>
+          <th>Subomains Permmited?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>quartz.ctfio.com</td>
+          <td>Yes</td>
+        </tr>
+      </tbody>
+    </table>
+
     <br>
     <br>
     <br>
@@ -287,7 +301,7 @@
       <summary> H-01 | High: Credential Brute-Force on Login Function</summary>
       <div class="finding">
         <p>
-          <strong>Finding ID:</strong> H-02
+          <strong>Finding ID:</strong> H-01
         </p>
         <p>
           <strong>Impact:</strong> Full account takeover of lawyer accounts.
@@ -441,9 +455,9 @@
         <ul>
           <img src="assets/nginxfooter.png" class="screenshot">
         </ul>
-        <p><strong>Recommendation:</strong> Our tenative recommendation is to set server_tokens off; in all Nginx blocks
-          to suppress version disclosure in headers and bodies. Please review the technical remediation section for a
-          better understanding.</p>
+        <p><strong>Recommendation:</strong> Our tentative recommendation is to set server_tokens off; in all Nginx
+          blocks to suppress version disclosure in headers and bodies. Please review the technical remediation section
+          for a better understanding.</p>
       </div>
     </details>
 
@@ -483,7 +497,7 @@
           </td>
         </tr>
         <tr>
-          <td><strong>C-02: IDOR - Profile Credential Disclosure</strong></td>
+          <td><strong>C-02: IDOR - Profile Credential Disclosure</strong></td>
           <td style="color: #ff5555"><strong>Critical</strong></td>
           <td>Medium</td>
           <td>≤ 14&nbsp;days</td>
@@ -652,7 +666,7 @@
     <img src="assets/profileDetailsSelfAccess.png" class="screenshot">
 
     <p>
-      Since the endpoint did not enforce access controls, we manually modified the ID value to test access to other
+      Since the endpoint did not enforce access controls, we modified the ID value to test access to other
       users' profiles.
     </p>
     <img src="assets/YusefProfDetails.png" class="screenshot">
@@ -665,8 +679,14 @@
     <img src="assets/ShaynesPortal.png" class="screenshot">
 
     <p>
-      Finally, we used Shayne's account to delete the referenced case file, discovering an implementation flaw.
-    </p><img src="assets/confirmeddeletion.png" class="screenshot">
+      Finally, we used Shayne's account to delete the referenced case file, discovering an implementation flaw. The file
+      returns after deletion.
+    </p><img src="assets/before.png" class="screenshot"><img src="assets/after.png" class="screenshot">
+
+    <p>After confirming we can compromise the web application, we doubled back to poke at the web application from
+      different angles noticing inconsistent Nginx versioning when met with a 403 error when accessing the /images and
+      /js directories.</p>
+    <img src="assets/nginxfooter.png" class="screenshot">
 
     <br>
     <br>
@@ -676,7 +696,7 @@
     <p>The following technical remediations are recommended to address the vulnerabilities identified during the
       assessment. Each recommendation is designed to not only resolve the immediate issue but also to promote long-term
       security hygiene through defensive development practices, access control enforcement, and architectural
-      improvements. All application level examples </p>
+      improvements.</p>
 
     <h3 style="text-align: center;" id="C-01">C-01 | Passwords Stored in Plaintext</h3>
     <p>To ensure the confidentiality and integrity of user credentials, passwords must never be stored or transmitted in
@@ -1235,7 +1255,7 @@ curl -s -D - https://quartz.ctfio.com -o /dev/null | grep -i ^Server | grep -Eq 
         <tr>
           <td>Noah ****</td>
           <td>Principal Penetration Tester</td>
-          <td>CouldBeYourCompanyHere</td>
+          <td>FakeCompany</td>
           <td>noah*****@fake.com</td>
           <td>123-456-7890</td>
         </tr>
