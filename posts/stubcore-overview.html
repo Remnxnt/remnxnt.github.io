@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Stubcore | Noah</title>
+
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+        <link
+            href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;600&family=Inter:wght@400;700&display=swap"
+            rel="stylesheet"
+        />
+
+        <link href="../assets/posts.css" rel="stylesheet" />
+    </head>
+
+    <body>
+        <div class="container">
+            <!-- NAV -->
+            <nav>
+                <a href="index.html" class="logo">Noah</a>
+
+                <div class="nav-links">
+                    <a href="index.html#whoami">whoami</a>
+                    <a href="index.html#writeups">Writeups</a>
+                    <a href="https://github.com/Remnxnt">Github</a>
+                </div>
+            </nav>
+
+            <!-- POST HEADER -->
+            <header class="post-header">
+                <div class="breadcrumb">
+                    <a href="index.html">~</a>
+                    <span class="sep">/</span>
+                    <a href="index.html#writeups">writeups</a>
+                    <span class="sep">/</span>
+                    <span>stubcore</span>
+                </div>
+
+                <div class="post-tag">Maldev / Runtime Architecture</div>
+
+                <h1 class="post-title">
+                    Building<br />
+                    <span class="accent">Stubcore</span>
+                </h1>
+
+                <p class="post-subtitle">
+                    Runtime-bound payload execution, generated stubs and why
+                    static loaders are boring.
+                </p>
+
+                <div class="post-meta">
+                    <span>May 12th 2026</span>
+                    <span class="dot">·</span>
+                    <span>⏱ ~12 min read</span>
+                    <span class="dot">·</span>
+                    <span class="mono"
+                        >by <span class="accent">Noah</span></span
+                    >
+                </div>
+            </header>
+
+            <!-- MAIN LAYOUT -->
+            <div class="post-layout">
+                <!-- ARTICLE -->
+                <article>
+                    <!-- ==================== INTRO ==================== -->
+                    <h2 id="intro">Introduction</h2>
+
+                    <p>
+                        I have always had an active imagination, as well as an
+                        intense interest in the near sci-fi level offensive
+                        capability of a particular APT. You know the one.
+                    </p>
+
+                    <p>
+                        Well, the chances that I would get hired there are quite
+                        low, for now. Most people would call it quits at that,
+                        "Damn, looks like I can't do cool shit :(". But not me.
+                        I got what the kids these days call free will. Combine
+                        that with that imagination I was talking about earlier
+                        and we can just play pretend with code like a kid
+                        playing GI Joe with a stick.
+                    </p>
+
+                    <p>
+                        Thus stubcore is born, to enhance a workflow nearly
+                        nobody has. 4 fun.
+                    </p>
+
+                    <!-- ==================== WHY ==================== -->
+                    <h2 id="problem">The Problem With Static Loaders</h2>
+
+                    <p>
+                        Most loaders are the same thing wearing different trench
+                        coats.
+                    </p>
+
+                    <p>
+                        Hardcoded key. XOR blob, maybe AES if you looked at a
+                        tutorial that week. Single injector. Same behavior every
+                        time it runs. Fine for a learning exercise,
+                        operationally D.O.A.
+                    </p>
+
+                    <p>
+                        The real problem is not that static loaders are easy to
+                        detect, although they are. It is that if everything
+                        needed for decryption lives inside the stub, the payload
+                        is recoverable by anyone willing to spend fifteen
+                        minutes in x64dbg. The "encryption" is just a speed
+                        bump.
+                    </p>
+
+                    <p>That reframes the question pretty quickly:</p>
+
+                    <div class="callout flag">
+                        <div class="callout-label">// Bad Question</div>
+                        <p>"How do I hide the payload from EDR?"</p>
+                    </div>
+
+                    <div class="callout info">
+                        <div class="callout-label">// Better Question</div>
+                        <p>
+                            "How do I rapidly produce and protect my payloads
+                            from nosey ass researchers and adversaries?"
+                        </p>
+                    </div>
+
+                    <p>
+                        That one question is basically the entire design
+                        document for stubcore.
+                    </p>
+
+                    <!-- ==================== ARCHITECTURE ==================== -->
+                    <h2 id="architecture">
+                        The Architecture of a Loader Generator
+                    </h2>
+
+                    <p>
+                        The first thing to understand is that Stubcore isn’t
+                        actually a loader. It’s a loader
+                        <i>factory</i>.
+                    </p>
+
+                    <p>
+                        That distinction is where the fun starts. Most static
+                        loaders are boring because they are predictable; you
+                        ship a binary, and it does the same dance every time.
+                        Stubcore, instead, runs a build pipeline that spits out
+                        purpose-built artifacts. It takes your injector source,
+                        compiles it into a compact PE, packages it with your
+                        payload, and then wraps the whole mess in an
+                        environment-aware stub.
+                    </p>
+
+                    <p>
+                        If you build two stubs targeting different conditions,
+                        you get two fundamentally different files. It’s not just
+                        a generic loader cosplaying as flexible, it's a specific
+                        artifact for a specific moment.
+                    </p>
+
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-lang">text</span>
+                            <span class="code-filename">build pipeline</span>
+                        </div>
+                        <pre><code>builder
+ ├─ generate injector source
+ ├─ compile injector
+ ├─ package payload + injector
+ ├─ encrypt composite
+ └─ emit final stub
+
+runtime
+ ├─ derive runtime key
+ ├─ decrypt composite
+ ├─ parse injector
+ ├─ execute injector
+ └─ injector handles payload</code></pre>
+                    </div>
+
+                    <!-- ==================== INJECTORS ==================== -->
+                    <h2 id="injector">Modular Injector Generation</h2>
+
+                    <p>
+                        I really wanted to kill the "monolithic loader" problem.
+                        You know the one, where every execution primitive is
+                        hardcoded into one giant file, and changing a single
+                        syscall means you have to touch every other part of the
+                        project.
+                    </p>
+
+                    <p>
+                        In Stubcore, injectors are modular. We treat prototypes
+                        like Lego bricks, appending them into a generated source
+                        file at build time.
+                    </p>
+
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-lang">C</span>
+                            <span class="code-filename"
+                                >generated injector</span
+                            >
+                        </div>
+
+                        <pre><code><span class="fn">fprintf</span>(<span class="var">f</span>, <span class="str">"#pragma code_seg(\".inject\")\n\n"</span>);
+<span class="fn">fprintf</span>(<span class="var">f</span>, <span class="str">"int injector(CONST PBYTE payload, CONST SIZE_T payloadsize) {\n"</span>);
+<span class="fn">append_file_to_stream</span>(<span class="var">proto_path</span>, <span class="var">f</span>);</code></pre>
+                    </div>
+
+                    <p>
+                        Once that source is generated, we link it into a tight,
+                        isolated PE. By using
+                        <code>/FIXED</code> to strip relocation data and
+                        <code>/NODEFAULTLIB</code> to keep out the CRT garbage,
+                        we end up with a very clean, predictable executable
+                        region. It’s the same concept I used in my previous
+                        shellcode post, but automated.
+                    </p>
+
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-lang">cmd</span>
+                            <span class="code-filename">linking</span>
+                        </div>
+
+                        <pre><code><span class="kw">link.exe</span> /ENTRY:injector /NODEFAULTLIB /FIXED /ALIGN:16 /SECTION:.inject,ER</code></pre>
+                    </div>
+
+                    <!-- ==================== COMPOSITES ==================== -->
+                    <h2 id="composite">Packing the Composite Payload</h2>
+
+                    <p>
+                        Managing an injector and a payload separately is a
+                        headache. To fix that, Stubcore mashes them together
+                        into a single "composite" blob.
+                    </p>
+
+                    <p>
+                        The builder assembles this at build time, slapping the
+                        injector and payload together with their respective
+                        lengths. By encrypting the whole thing as a single unit
+                        with AES-GCM, we get built-in authentication. If anyone
+                        tampers with a single byte of that structure, the whole
+                        thing becomes cryptographically invalid. I’d much rather
+                        have a clean failure than a partial execution of
+                        something that’s been messed with.
+                    </p>
+
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-lang">C</span>
+                            <span class="code-filename">builder logic</span>
+                        </div>
+
+                        <pre><code><span class="fn">memcpy</span>(<span class="var">composite</span>, <span class="op">&amp;</span><span class="var">inj_be</span>, <span class="num">4</span>);
+<span class="fn">memcpy</span>(<span class="var">composite</span> <span class="op">+</span> <span class="num">4</span>, <span class="op">&amp;</span><span class="var">pay_be</span>, <span class="num">4</span>);
+<span class="fn">memcpy</span>(<span class="var">composite</span> <span class="op">+</span> <span class="num">8</span>, <span class="var">injector</span>, <span class="var">inj_len</span>);
+<span class="fn">memcpy</span>(<span class="var">composite</span> <span class="op">+</span> <span class="num">8</span> <span class="op">+</span> <span class="var">inj_len</span>, <span class="var">payload</span>, <span class="var">payload_len</span>);</code></pre>
+                    </div>
+
+                    <!-- ==================== CRYPTO ==================== -->
+                    <h2 id="crypto">Runtime-Bound Encryption</h2>
+
+                    <p>
+                        This is what makes the project interesting. If you look
+                        at the binary, you won't find an encryption key. It
+                        simply isn't there.
+                    </p>
+
+                    <p>
+                        Instead, the stub derives the key at runtime from its
+                        environment. It might pull a string from a command-line
+                        argument, a machine name, or a specific registry key,
+                        then hashes that data to create the AES-256-GCM key.
+                    </p>
+
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-lang">C</span>
+                            <span class="code-filename">key derivation</span>
+                        </div>
+
+                        <pre><code><span class="kw">int</span> <span class="fn">getKey</span>(<span class="kw">unsigned char</span> <span class="var">key_out</span>[<span class="num">32</span>]) {
+    <span class="kw">char</span> <span class="var">MAC</span>[<span class="num">256</span>];
+    <span class="var">IP_ADAPTER_INFO</span> <span class="var">AdapterInfo</span>[<span class="num">16</span>];
+    <span class="var">DWORD</span> <span class="var">dwBufLen</span> <span class="op">=</span> <span class="kw">sizeof</span>(<span class="var">AdapterInfo</span>);
+    <span class="var">DWORD</span> <span class="var">dwStatus</span> <span class="op">=</span> <span class="fn">GetAdaptersInfo</span>(<span class="var">AdapterInfo</span>, <span class="op">&amp;</span><span class="var">dwBufLen</span>);
+    <span class="kw">if</span> (<span class="var">dwStatus</span> <span class="op">!=</span> <span class="var">ERROR_SUCCESS</span>) {
+        <span class="kw">return</span> <span class="num">0</span>;
+    }
+    <span class="var">PIP_ADAPTER_INFO</span> <span class="var">pAdapterInfo</span> <span class="op">=</span> <span class="var">AdapterInfo</span>;
+    <span class="kw">while</span> (<span class="var">pAdapterInfo</span>) {
+        <span class="kw">if</span> (<span class="var">pAdapterInfo</span><span class="op">-&gt;</span><span class="var">AddressLength</span> <span class="op">==</span> <span class="num">6</span>) {
+            <span class="fn">sprintf</span>(<span class="var">MAC</span>, <span class="str">"%02X%02X%02X%02X%02X%02X"</span>,
+                <span class="var">pAdapterInfo</span><span class="op">-&gt;</span><span class="var">Address</span>[<span class="num">0</span>],
+                <span class="var">pAdapterInfo</span><span class="op">-&gt;</span><span class="var">Address</span>[<span class="num">1</span>],
+                <span class="var">pAdapterInfo</span><span class="op">-&gt;</span><span class="var">Address</span>[<span class="num">2</span>],
+                <span class="var">pAdapterInfo</span><span class="op">-&gt;</span><span class="var">Address</span>[<span class="num">3</span>],
+                <span class="var">pAdapterInfo</span><span class="op">-&gt;</span><span class="var">Address</span>[<span class="num">4</span>],
+                <span class="var">pAdapterInfo</span><span class="op">-&gt;</span><span class="var">Address</span>[<span class="num">5</span>]);
+            <span class="kw">break</span>;
+        }
+        <span class="var">pAdapterInfo</span> <span class="op">=</span> <span class="var">pAdapterInfo</span><span class="op">-&gt;</span><span class="var">Next</span>;
+    }
+    <span class="fn">SHA256</span>((<span class="kw">unsigned char</span><span class="op">*</span>)<span class="var">MAC</span>,
+        <span class="fn">strlen</span>(<span class="var">MAC</span>),
+        <span class="var">key_out</span>);
+    <span class="kw">return</span> <span class="num">1</span>;
+}</code></pre>
+                    </div>
+
+                    <p>
+                        The execution gaurdrails serve multiple purposes. On one
+                        hand, it helps us protect our tactics, techniques, and
+                        procedures from our adversaries, and on the other it
+                        allows us to be very precise in our targeting. We don't
+                        need to hack the world, we need to hack
+                        <em>that guy</em>.
+                    </p>
+
+                    <p></p>
+
+                    <!-- ==================== STUBS ==================== -->
+                    <h2 id="stubgen">The Self-Writing Stub</h2>
+
+                    <p>
+                        To tie it all together, the final stub is generated on
+                        the fly. During the build process, Stubcore emits a
+                        custom <code>stub.c</code>. It literally writes the hex
+                        bytes of the encrypted payload into the source code,
+                        alongside the validation logic and the runtime key
+                        derivation code.
+                    </p>
+
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-lang">C</span>
+                            <span class="code-filename">payload embedding</span>
+                        </div>
+                        <pre><code><span class="fn">fprintf</span>(<span class="var">f</span>, <span class="str">"unsigned char payload[] = {"</span>);
+<span class="kw">for</span> (<span class="kw">int</span> <span class="var">i</span> <span class="op">=</span> <span class="num">0</span>; <span class="var">i</span> <span class="op">&lt;</span> <span class="var">blob_len</span>; <span class="var">i</span><span class="op">++</span>)
+    <span class="fn">fprintf</span>(<span class="var">f</span>, <span class="str">"0x%02x,"</span>, <span class="var">blob</span>[<span class="var">i</span>]);</code></pre>
+                    </div>
+
+                    <p>
+                        This turns the stub from a simple "loader" into a
+                        "runtime policy engine." It’s a much more interesting
+                        way to build software, and it makes the resulting binary
+                        a lot harder to reason about from a defender's
+                        perspective.
+                    </p>
+
+                    <!-- ==================== FUTURE ==================== -->
+                    <h2 id="future">What's Next?</h2>
+
+                    <p>
+                        The "To-Do" list is still pretty long. I'm looking into
+                        direct syscall prototypes, entropy shaping to make the
+                        binaries look less suspicious, multiple environmental
+                        guards used in tandem, and distributed payload
+                        structures where the pieces live in different places.
+                    </p>
+
+                    <p>
+                        The best part is that because the architecture is
+                        modular, I can add these features without performing
+                        major surgery on the core logic. It was built to be
+                        played with, and experimenting with a new execution
+                        method is now just an afternoon's work rather than a
+                        week-long project.
+                    </p>
+
+                    <!-- ==================== CONCLUSION ==================== -->
+                    <h2 id="conclusion">Closing Thoughts</h2>
+
+                    <p>
+                        At the end of the day, Stubcore was a lesson in what
+                        generated runtime execution could look like. The payload
+                        itself was never the interesting part, the interesting
+                        parts were the runtime dependencies, the modular
+                        injectors, and the way the execution logic builds
+                        itself.
+                    </p>
+
+                    <p>
+                        Static loaders are easy to fingerprint because they
+                        never change. Something that generates its own behavior
+                        at build time and hunts for its keys at runtime is a
+                        different category of problem entirely.
+                    </p>
+
+                    <p>
+                        Anyway, it was a blast to build and I learned a ton.
+                        That’s the only bar that matters.
+                    </p>
+
+                    <p>
+                        The code is on GitHub if you want to poke around or tell
+                        me where my C-code is ugly:
+                        <a href="https://github.com/Remnxnt/stubcore"
+                            >stubcore on GitHub</a
+                        >.
+                    </p>
+
+                    <hr class="section-divider" />
+
+                    <!-- POST NAV -->
+                    <div class="post-nav">
+                        <a href="index.html#writeups">← Back to Writeups</a>
+                        <a href="#">Next Post →</a>
+                    </div>
+                </article>
+
+                <!-- TOC -->
+                <aside>
+                    <div class="toc">
+                        <div class="toc-title">> Contents</div>
+
+                        <ol>
+                            <li><a href="#intro">Introduction</a></li>
+                            <li>
+                                <a href="#problem"
+                                    >The Problem With Static Loaders</a
+                                >
+                            </li>
+                            <li><a href="#architecture">Architecture</a></li>
+                            <li>
+                                <a href="#injector">Injector Generation</a>
+                            </li>
+                            <li>
+                                <a href="#composite">Composite Payloads</a>
+                            </li>
+                            <li>
+                                <a href="#crypto">Runtime-Bound Encryption</a>
+                            </li>
+                            <li>
+                                <a href="#stubgen">Generated Stubs</a>
+                            </li>
+                            <li><a href="#future">Future Ideas</a></li>
+                            <li><a href="#conclusion">Conclusion</a></li>
+                        </ol>
+                    </div>
+                </aside>
+            </div>
+
+            <!-- FOOTER -->
+            <footer>
+                <div class="socials">
+                    <a href="https://github.com/Remnxnt">Github</a>
+                    <a href="#">LinkedIn</a>
+                </div>
+
+                <br />
+
+                <p class="mono">root@noah:~# exit</p>
+            </footer>
+        </div>
+
+        <script>
+            // Highlight active TOC item on scroll
+            const headings = document.querySelectorAll("article h2[id]");
+            const tocLinks = document.querySelectorAll(".toc a");
+
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            tocLinks.forEach((l) =>
+                                l.parentElement.classList.remove("active"),
+                            );
+
+                            const active = document.querySelector(
+                                `.toc a[href="#${entry.target.id}"]`,
+                            );
+
+                            if (active)
+                                active.parentElement.classList.add("active");
+                        }
+                    });
+                },
+                { rootMargin: "-20% 0px -60% 0px" },
+            );
+
+            headings.forEach((h) => observer.observe(h));
+        </script>
+    </body>
+</html>
