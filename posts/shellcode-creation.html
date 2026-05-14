@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Shellcode Creation | Noah</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;600&family=Inter:wght@400;700&display=swap"
+            rel="stylesheet"
+        />
+        <link href="../assets/posts.css" rel="stylesheet" />
+    </head>
+    <body>
+        <div class="container">
+            <!-- NAV -->
+            <nav>
+                <a href="index.html" class="logo">Noah</a>
+                <div class="nav-links">
+                    <a href="index.html#whoami">whoami</a>
+                    <a href="index.html#writeups">Writeups</a>
+                    <a href="https://github.com/Remnxnt">Github</a>
+                </div>
+            </nav>
+
+            <!-- POST HEADER -->
+            <header class="post-header">
+                <div class="breadcrumb">
+                    <a href="index.html">~</a>
+                    <span class="sep">/</span>
+                    <a href="index.html#writeups">writeups</a>
+                    <span class="sep">/</span>
+                    <span>shellcode-creation</span>
+                </div>
+                <div class="post-tag">Maldev / Reverse Engineering</div>
+                <h1 class="post-title">
+                    Shellcode<br /><span class="accent">Creation</span>
+                </h1>
+                <p class="post-subtitle">
+                    A walkthrough of shellcode creation concepts / A how to without the handholding.
+                </p>
+                <div class="post-meta">
+                    <span>May 10th 2026</span>
+                    <span class="dot">·</span>
+                    <span>⏱ ~8 min read</span>
+                    <span class="dot">·</span>
+                    <span class="mono"
+                        >by <span class="accent">Noah</span></span
+                    >
+                </div>
+            </header>
+
+            <!-- MAIN LAYOUT -->
+            <div class="post-layout">
+                <!-- ARTICLE -->
+                <article>
+                    <!-- ==================== INTRO ==================== -->
+                    <h2 id="intro">Introduction</h2>
+                    <p>
+                        When I first started dabbling in malware and general
+                        computer based tom-foolery I knew what shellcode WAS,
+                        but always struggled with one simple question that
+                        wasn't quite explained by anyone:
+                    </p>
+
+                    <div class="callout info">
+                        <div class="callout-label">// Question</div>
+                        <p>"so... how u make that shit then?"</p>
+                    </div>
+
+                    <p>
+                        Use <code>msfvenom</code>! Okay, sure that's the
+                        pragmatic approach and will work in 99% of cases,
+                        however just getting shellcode is not the goal. I want
+                        the knowledge college. I wanna be the pro hackermans,
+                        get mad skillz, alladat.
+                    </p>
+
+                    <p>
+                        That's what this post is going to be about. How to
+                        create shellcode (it's in the title...) and how every
+                        step along the way works, why it works and yada yada
+                        yada.
+                    </p>
+
+                    <p>
+                        Oh yeah, keep it legal. The defense is op af and you will get owned real bad.
+                    </p>
+
+
+                    <h2 id="whatis">What is Shellcode</h2>
+                    <p>
+                        Put simply shellcode is raw bytes that the cpu
+                        will execute. Typically presented in hex because binary
+                        is unwieldy and hurts our human brains. I will use the
+                        Linux exit function to illustrate going from C code to shellcode.
+                    </p>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-lang">C</span>
+                            <span class="code-filename"> raw code</span>
+                        </div>
+                        <pre><code><span class="kw">int </span><span class="fn">main</span>(int argc, char* argv[]) {
+    <span class="cm">//Do something </span>
+    <span class="cm">//Do something </span>
+<span class="kw">    exit</span>(0)<span class="cm"> // Or return 0, for you l33t coders out there.</span>
+}</code></pre>
+                    </div>
+                    <p>A compiler may generate assembly equivalent to:</p>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-lang">x86 asm</span>
+                            <span class="code-filename">compiled code</span>
+                        </div>
+                        <pre><code><span class="cm">; exit(0) on Linux x86-64</span>
+<span class="kw">mov</span>   rax, 60        <span class="cm">; syscall number for exit </span>
+<span class="kw">xor</span>   rdi, rdi       <span class="cm">; exit code 0</span>
+<span class="kw">syscall</span>  <span class="cm">; invoke the kernel</span></code></pre>
+                    </div>
+
+                    <p>Assembled, each instruction becomes raw bytes:</p>
+
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-lang">hex</span>
+                            <span class="code-filename">encoded bytes</span>
+                        </div>
+                        <pre><code><span class="cm">; exit(0) on Linux x86-64</span>
+<span class="num">48</span> <span class="kw">C7</span><span class="num"> C0 3C 00 00 00</span>   <span class="cm">; mov rax, 60</span>
+<span class="num">48 <span class="kw">31</span> FF</span>               <span class="cm">; xor rdi, rdi</span>
+<span class="kw">0F 05</span>                  <span class="cm">; syscall</span></code></pre>
+                    </div>
+                    <p>
+                        Lets break down how we got to these funny numbers. To
+                        start you will notice the first two instructions
+                        prefixed with <code>48</code>, this is known as a register extension
+                        prefix, and is indicating to the cpu to expect 64-bit
+                        operand width. Next we will have the opcodes, these are
+                        the action that the cpu will take. For the first
+                        instruction the opcode is <code>C7</code>, corresponding
+                        to "Move Immediate"<em>*</em> or in ASM <code>mov</code>. If you
+                        are a particularly smart cookie you might guess that
+                        what comes next is telling the cpu where its moving
+                        something to. This byte is called the ModR/M byte,
+                        <code>C0</code> in this instance meaning the
+                        <code>rax</code> register. Yes, <code>3C 00 00 00</code> is 60, but in little <a href=https://en.wikipedia.org/wiki/Endianness>endian</a> format.
+                    </p>
+                    <div class="callout flag">
+                        <div class="callout-label">// For turbo nerds</div>
+                        <p>
+                            Technically C7 /0 corresponds to MOV r/m64, imm32, but I refuse to elaborate on that for now.
+                        </p>
+                    </div>
+
+                    <p>Concatenated into shellcode string notation:</p>
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-lang">c</span>
+                            <span class="code-filename"
+                                >shellcode representation</span
+                            >
+                        </div>
+                        <pre><code><span class="kw">char</span> sc[] <span class="op">=</span> <span class="str">"\x48\xC7\xC0\x3C\x00\x00\x00\x48\x31\xFF\x0F\x05"</span>;</code></pre>
+                    </div>
+                    <p>
+                        The next step is to place that string into executable memory,
+                        call it and let the computer do its thing. The CPU sees no
+                        difference between these representations, they are the same bytes.
+                        The art of maldev is how you get it there and how you call it without
+                        some nosey "EDR" deleting your beautifully crafted puppycat.jpg.exe.
+                    </p>
+
+                    <!-- ==================== Writing the code ==================== -->
+                    <h2 id="coding">Writing The Code</h2>
+                    <p>
+                        When you write code, you likely do not mind how the
+                        compiler will structure the binary, this however,
+                        is very important to how we are actually going to
+                        extract our shellcode as the compiler bakes in
+                        a lot of noise:
+                    </p>
+
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-lang">PE32</span>
+                            <span class="code-filename">typical compiled executable</span>
+                        </div><pre><code>
+                    +--------------------------------------------------+
+                    | DOS Header                                       |
+                    | "MZ"                                             |
+                    +--------------------------------------------------+
+                    | DOS Stub                                         |
+                    | "This program cannot be run in DOS mode."        |
+                    +--------------------------------------------------+
+                    | PE Header                                        |
+                    | "PE\0\0"                                         |
+                    +--------------------------------------------------+
+                    | Optional Header                                  |
+                    | ImageBase, EntryPoint, Section Info, etc         |
+                    +--------------------------------------------------+
+                    | .text                                            |
+                    | Executable code                                  |
+                    | main(), CRT startup, compiler generated code     |
+                    +--------------------------------------------------+
+                    | .rdata                                           |
+                    | Read-only data, strings, imports                 |
+                    +--------------------------------------------------+
+                    | .data                                            |
+                    | Initialized global variables                     |
+                    +--------------------------------------------------+
+                    | .pdata                                           |
+                    | Exception handling metadata                      |
+                    +--------------------------------------------------+
+                    | .rsrc                                            |
+                    | Icons, manifests, version info                   |
+                    +--------------------------------------------------+
+                    | .reloc                                           |
+                    | Relocation table                                 |
+                    +--------------------------------------------------+
+                    | Import Address Table                             |
+                    | kernel32.dll, ntdll.dll, etc                     |
+                    +--------------------------------------------------+</code></pre>
+                    </div>
+
+                    <p>Our shellcode is usually hiding somewhere inside
+                    <code>.text</code>, surrounded by runtime initialization
+                    code, metadata, imports, relocations and other compiler-generated
+                    shit we neither need nor want. The cleaner our code is, the easier
+                    extraction becomes.</p>
+
+                    <h3>Sectioning</h3>
+                    <p>
+                        The easiest way to separate our code from the junk
+                        is to have it placed in a specific section that we can
+                        force to only contain our code. Lucky for us, modern
+                        compilers will allow us to do just that:
+                    </p>
+
+                    <div class="code-block">
+                        <div class="code-header">
+                            <span class="code-lang">C</span>
+                            <span class="code-filename">section placement example</span>
+                        </div><pre><code>#include <span class="str">"myheader.h"</span>
+
+<span class="cm">// GCC/Clang </span>
+<span class="kw">__attribute__</span>((<span class="kw">section</span>(<span class="str">".mysection"</span>)))
+
+<span class="cm">// MSVC</span>
+#pragma <span class="kw">code_seg</span>(<span class="str">".mysection"</span>) <span class="cm"></span>
+
+<span class="kw">int</span> <span class="fn">innocentfn</span>(<span class="kw">CONST</span> <span class="kw">PBYTE</span> <span class="var">pl</span>, <span class="kw">CONST</span> <span class="kw">SIZE_T</span> <span class="var">plsize</span>) {
+    <span class="cm">// do stuff</span>
+}</code></pre></div>
+                    <p>
+                        With this our code will be contained within the <code>.mysection</code> section rather than <code>.text</code> which will aid us later when extracting.
+                    </p>
+
+                    <h3>Position Independence</h3>
+
+                    <p>
+                        When creating shellcode there is a necessity that the
+                        code can run in any place in memory that it happens to land.
+                        Meaning references to absolute addresses are banned,
+                        everything must be position independent without assuming
+                        anything about the current memory layout, because once you copy the
+                        shellcode elsewhere, those addresses still point to the old image base.
+                    </p>
+
+                    <p>
+                        An example of code that is not explicitly position independent:
+                    </p>
+                    <div class="code-block">
+    <div class="code-header">
+        <span class="code-lang">C</span>
+        <span class="code-filename">absolute addressing style</span>
+    </div>
+<pre><code>#include <span class="str">&lt;stdio.h&gt;</span>
+
+<span class="kw">int</span> <span class="var">secretValue</span> <span class="op">=</span> <span class="num">1337</span>;
+
+<span class="cm">/* pointer stored in writable memory (relocation target) */</span>
+<span class="kw">int</span> <span class="op">*</span><span class="var">globalPtr</span> <span class="op">=</span> <span class="op">&amp;</span><span class="var">secretValue</span>;
+
+<span class="kw">void</span> <span class="fn">printInfo</span>(<span class="kw">void</span>){
+    <span class="fn">printf</span>(<span class="str">"%d\n"</span>, <span class="op">*</span><span class="var">globalPtr</span>);
+}
+
+<span class="kw">int</span> <span class="fn">main</span>(<span class="kw">void</span>){
+    <span class="cm">/* assumes globalPtr resolves correctly via loader fixups */</span>
+    <span class="fn">printInfo</span>();
+    <span class="kw">return</span> <span class="num">0</span>;
+}</code></pre>
+</div>
+
+                    <p>
+                        This style of code demonstrates a hard dependency on a fixed address via a global pointer.
+                        The main idea is that the pointer value is assumed stable and stored in a relocatable slot.
+                        This will probably break when you remove it from a PE/ELF context, which is exactly what
+                        we are going to do.
+                    </p>
+                    <p>
+                        And here is code that is accomplishing the same thing while avoiding absolute addressing:
+                    </p>
+                    <div class="code-block">
+    <div class="code-header">
+        <span class="code-lang">C</span>
+        <span class="code-filename">relative addressing style</span>
+    </div>
+<pre><code><span class="pp">#include</span> <span class="str">&lt;stdio.h&gt;</span>
+
+<span class="kw">static</span> <span class="kw">int</span> <span class="var">secretValue</span> <span class="op">=</span> <span class="num">1337</span>;
+
+<span class="kw">static</span> <span class="kw">int</span><span class="op">*</span> <span class="fn">getPtr</span>(<span class="kw">void</span>){
+    <span class="cm">/* compiler typically uses RIP-relative addressing here */</span>
+    <span class="kw">return</span> <span class="op">&amp;</span><span class="var">secretValue</span>;
+}
+
+<span class="kw">void</span> <span class="fn">printInfo</span>(<span class="kw">void</span>){
+    <span class="kw">int</span> <span class="op">*</span><span class="var">ptr</span> <span class="op">=</span> <span class="fn">getPtr</span>();
+
+    <span class="fn">printf</span>(<span class="str">"%d\n"</span>, <span class="op">*</span><span class="var">ptr</span>);
+}
+
+<span class="kw">int</span> <span class="fn">main</span>(<span class="kw">void</span>){
+    <span class="fn">printInfo</span>();
+    <span class="kw">return</span> <span class="num">0</span>;
+}</code></pre>
+</div>
+                    <div class="callout warn">
+                        <div class="callout-label">// Homework</div>
+                            <p>
+                                The astute ones among you may notice that calling <code>printf()</code> would not quite work in shellcode,
+                                since you would not be able to use the Import Address Table to find the printf function.
+                                And you would be correct. Your homework is to research how to dynamically resolve functions
+                                so that you can use them in shellcode. Have fun.
+                            </p>
+                    </div>
+
+                    <!-- ==================== Compiling And Linking ==================== -->
+                    <h2 id="compile">Compiling and Linking</h2>
+                    <p>
+                        Now we have reached the easy part, it really is just
+                        two commands until you move onto extraction.
+                        But there is some nuance to dig into on this.
+                    </p>
+                    <p>
+                        We will use MSVC tools as an example for this:
+                    </p>
+                    <div class="code-block">
+                    <div class="code-header">
+                        <span class="code-lang">cmd</span>
+                        <span class="code-filename">compile</span>
+                    </div><pre><code>cl.exe /c /GS- /O2 shellcode.c</code></pre></div>
+                    <p>
+                        Let's look at the options and what they are doing. The <code>/c</code>
+                        option is instructing the compiler to only create a .obj file and stop,
+                        since we want to handle the linking manually to manage the structure of
+                        the binary. The <code>/GS-</code> option disables the stack canary that
+                        MSVC adds to functions to prevent overflows. This requires a call to
+                        <code>__security_check_cookie</code>, which is an external C Runtime (CRT) function that
+                        will cause your shellcode to crash. The <code>/O2</code> option is for
+                        optimizing the code. This will also help reduce the number of null
+                        bytes, which we will touch on later.
+                    </p>
+                    <p>Next is to manually link the .obj file into a binary:</p>
+                    <div class="code-block">
+                    <div class="code-header">
+                        <span class="code-lang">cmd</span>
+                        <span class="code-filename">link</span>
+                    </div><pre><code>link.exe /ENTRY:FunctionName /NODEFAULTLIB /FIXED shellcode.obj</code></pre></div>
+                    <p>
+                        This is where the nuance really lies, to start: <code>/ENTRY:FunctionName</code>
+                        is defining a manual entry point, by default programs start at <code>main</code>
+                        or <code>WinMain</code>, which are actually called by the CRT startup code. Since
+                        we are ditching the CRT, we tell the linker to start execution at our function
+                        instead. <code>/NODEFAULTLIB</code> does exactly what it suggests, disables the
+                        inclusion of default libraries. <code>/FIXED</code> Prevents the linker from
+                        creating a <code>.reloc</code> section. Since our code is position-independent
+                        by design, we nix the relocation table.
+                    </p>
+                    <!-- ==================== Extraction ==================== -->
+                    <h2 id="extract">Extraction</h2>
+                    <p>
+                        Now we have a clean binary, parsing the PE at this point is trivial with a python library <code>pefile</code>:
+                    </p>
+                    <div class="code-block">
+    <div class="code-header">
+        <span class="code-lang">Python</span>
+        <span class="code-filename">PE section shellcode extractor</span>
+    </div>
+<pre><code><span class="kw">import</span> pefile
+<span class="kw">import</span> sys
+
+<span class="kw">def</span> <span class="fn">save_shellcode</span>(exe_path):
+    <span class="kw">try</span>:
+        pe <span class="op">=</span> pefile.PE(exe_path)
+        target_section <span class="op">=</span> <span class="kw">None</span>
+
+        <span class="kw">for</span> section <span class="kw">in</span> pe.sections:
+            <span class="kw">if</span> <span class="str">b".shellcode"</span> <span class="kw">in</span> section.Name:
+                target_section <span class="op">=</span> section
+                <span class="kw">break</span>
+
+        <span class="kw">if</span> <span class="kw">not</span> target_section:
+            <span class="fn">print</span>(<span class="str">"[-] Could not find .shellcode section!"</span>)
+            <span class="kw">return</span>
+
+        raw_code <span class="op">=</span> target_section.get_data()[: target_section.Misc_VirtualSize]
+
+        <span class="var">c_string</span> <span class="op">=</span> <span class="str">''</span>.join(<span class="kw">f</span><span class="str">'\\x{b:02x}'</span> <span class="kw">for</span> <span class="var">b</span> <span class="kw">in</span> <span class="var">raw_code</span>)
+
+        <span class="fn">print</span>(<span class="str">"\n[CSTRING]\n"</span>)
+        <span class="fn">print</span>(<span class="str">f"\"{c_string}\""</span>)
+
+    <span class="kw">except</span> <span class="kw">Exception</span> <span class="kw">as</span> e:
+        <span class="fn">print</span>(<span class="str">f"[-] Error: {e}"</span>)
+
+
+<span class="kw">if</span> __name__ <span class="op">==</span> <span class="str">"__main__"</span>:
+    <span class="fn">save_shellcode</span>(<span class="str">"shellcode.exe"</span>)</code></pre>
+</div>
+
+                        <p>
+                            The script iterates over the PE's section table looking for a section named
+                            .shellcode straightforward enough. The interesting part is this line:
+                        </p>
+                        <div class="code-block"><div class="code-header"><span class="code-lang">Python</span>
+                        <span class="code-filename">PE section shellcode extractor</span>
+                    </div>
+                <pre><code>raw_code = target_section.get_data()[:target_section.Misc_VirtualSize]</code></pre></div>
+
+
+                        <p>
+                            <code>get_data()</code> pulls the sections raw bytes, but it returns data sized
+                            to the sections raw data size, that is, the size after the linker has padded it
+                            to meet the file alignment boundary (probably 512 bytes). That padding is just
+                            <code>\x00</code> appended to fill the alignment gap.
+                        </p>
+
+                        <p>
+                            <code>Misc_VirtualSize</code> on the other hand, is the field the linker writes
+                            to record the sections actual content size before any padding is applied.
+                        </p>
+
+                        <p>
+                            By slicing <code>get_data()</code> to <code>Misc_VirtualSize</code>, you're
+                            stripping the alignment padding and keeping only the bytes that you want.
+                        </p>
+
+                    <h3>Null-Bytes</h3>
+
+                    <p>
+                        One immediate problem you will run into when converting raw shellcode into a
+                        cstring is the presence of null bytes. In C strings are terminated by a null byte,
+                        meaning any <code>\x00</code> inside your shellcode will truncate execution prematurely
+                        if it is treated as a string literal.
+                    </p>
+                    <p>
+                        In practice, this means raw output like:
+                        <code>\x48\x00\xC7...</code>
+                        shouldn't be embedded as a normal string. The string will end at the first
+                        null byte and you will silently lose the rest of your payload.
+                    </p>
+                    <p>
+                        The simplest and easiest way to work around this is to store the shellcode in
+                        <code>unsigned char[]</code> and execute it as a buffer. Encoding, encryption, substitution, etc.
+                        are the more interesting solutions, but those belong in a post about evasion, not
+                        creation. This one's long enough.
+                    </p>
+                    <!-- ==================== CONCLUSION ==================== -->
+                    <h2 id="conclusion">Conclusion</h2>
+                    <p>
+                        That's pretty much it. That's how u make that shit.
+                        If you want to see examples of this being used to generate custom shellcode,
+                        feel free to check out the first maldev project I will totally finish one day <a href="https://github.com/Remnxnt/stubcore">stubcore</a>.
+                    </p>
+
+
+                    <hr class="section-divider" />
+
+                    <!-- POST NAV -->
+                    <div class="post-nav">
+                        <a href="index.html#writeups">← Back to Writeups</a>
+                        <a href="#">Next Post →</a>
+                    </div>
+                </article>
+
+                <!-- TOC (sidebar) -->
+                <aside>
+                    <div class="toc">
+                        <div class="toc-title">> Contents</div>
+                        <ol>
+                            <li><a href="#intro">Introduction</a></li>
+                            <li><a href="#whatis">What is Shellcode</a></li>
+                            <li><a href="#coding">Writing the code</a></li>
+                            <li><a href="#compile">Compiling and Linking</a></li>
+                            <li><a href="#extract">Extraction</a></li>
+                            <li><a href="#conclusion">Conclusion</a></li>
+                        </ol>
+                    </div>
+                </aside>
+            </div>
+
+            <!-- FOOTER -->
+            <footer>
+                <div class="socials">
+                    <a href="https://github.com/Remnxnt">Github</a>
+                    <a href="#">LinkedIn</a>
+                </div>
+                <br />
+                <p class="mono">root@noah:~# exit</p>
+            </footer>
+        </div>
+
+        <script>
+            // Highlight active TOC item on scroll
+            const headings = document.querySelectorAll("article h2[id]");
+            const tocLinks = document.querySelectorAll(".toc a");
+
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            tocLinks.forEach((l) =>
+                                l.parentElement.classList.remove("active"),
+                            );
+                            const active = document.querySelector(
+                                `.toc a[href="#${entry.target.id}"]`,
+                            );
+                            if (active)
+                                active.parentElement.classList.add("active");
+                        }
+                    });
+                },
+                { rootMargin: "-20% 0px -60% 0px" },
+            );
+
+            headings.forEach((h) => observer.observe(h));
+        </script>
+    </body>
+</html>
