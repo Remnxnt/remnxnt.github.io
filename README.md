@@ -1,5 +1,5 @@
 # remnxnt.github.io
 
-Created for a Pentest report competition, perhaps i do something else with it one day.
+It's a blog now
 
-https://remnxnt.github.io/report.html
+https://remnxnt.github.io/
